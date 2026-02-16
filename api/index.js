@@ -11,70 +11,74 @@ const upload = multer();
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: '50mb' }));
 
-// Коннект к базе
+// Подключение к базе
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
-// --- ЭТАП 1: ТОЛЬКО РАСПОЗНАВАНИЕ (БЕЗ СОХРАНЕНИЯ) ---
-// Этот роут просто возвращает ответ от ИИ, чтобы проверить API Ключ
-app.post('/api/debug/analyze', upload.single('image'), async (req, res) => {
+// --- ГЛАВНЫЙ РОУТ (РАЗДЕЛЕННЫЙ) ---
+app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "Файл не получен" });
+    // --- ЭТАП 1: ТОЛЬКО РАСПОЗНАВАНИЕ (GEMINI) ---
+    console.log("Stage 1: AI Recognition Start");
+    
+    if (!req.file) throw new Error("Файл не получен сервером");
 
     const base64 = req.file.buffer.toString("base64");
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
     
-    const response = await fetch(url, {
+    const aiResponse = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [
-          { text: "Назови инструмент на фото одним словом на русском языке." },
+          { text: "Назови инструмент на фото. JSON формат: {\"toolName\": \"Название\", \"count\": 1}. На русском." },
           { inline_data: { mime_type: req.file.mimetype, data: base64 } }
         ]}]
       })
     });
     
-    const data = await response.json();
-    
-    if (data.error) {
-      return res.status(500).json({ error: "Ошибка Google Gemini", details: data.error.message });
+    const aiData = await aiResponse.json();
+
+    if (!aiData.candidates || !aiData.candidates[0]) {
+      console.error("AI Error Details:", JSON.stringify(aiData));
+      return res.status(500).json({ error: "Ошибка ИИ (Stage 1)", details: aiData.error?.message || "Пустой ответ" });
     }
 
-    const aiText = data.candidates[0].content.parts[0].text;
-    res.json({ success: true, aiResult: aiText.trim() });
-
-  } catch (e) {
-    res.status(500).json({ error: "Ошибка на Этапе 1", message: e.message });
-  }
-});
-
-// --- ЭТАП 2: ТОЛЬКО СОХРАНЕНИЕ В БАЗУ ---
-// Этот роут просто записывает текст, который ты пришлешь вручную
-app.post('/api/debug/save', async (req, res) => {
-  try {
-    const { name, count } = req.body;
+    const aiText = aiData.candidates[0].content.parts[0].text;
+    const aiResult = JSON.parse(aiText.match(/\{.*\}/s)[0]);
     
-    const newEntry = new Tool({
-      toolName: name || "Тестовый инструмент",
-      confidence: "Manual Test",
-      image: "" // Пока без фото, чтобы проверить только базу
+    console.log("Stage 1 Success: AI saw", aiResult.toolName);
+
+    // --- ЭТАП 2: ТОЛЬКО СОХРАНЕНИЕ (MONGODB) ---
+    console.log("Stage 2: Database Saving Start");
+
+    const newTool = new Tool({
+      toolName: aiResult.toolName,
+      confidence: "AI Generated",
+      image: `data:${req.file.mimetype};base64,${base64}`
     });
 
-    await newEntry.save();
-    res.json({ success: true, message: "Записано в MongoDB!", data: newEntry });
+    await newTool.save();
+    console.log("Stage 2 Success: Tool saved to DB");
+
+    res.json({ success: true, toolName: aiResult.toolName });
 
   } catch (e) {
-    res.status(500).json({ error: "Ошибка на Этапе 2 (MongoDB)", message: e.message });
+    console.error("Critical Error:", e.message);
+    res.status(500).json({ 
+      error: "Ошибка обработки", 
+      message: e.message,
+      stage: e.message.includes("database") ? "Database" : "AI/Internal"
+    });
   }
 });
 
-// Получение списка (проверка дерева)
+// Роут для дерева инструментов
 app.get('/api/tools/tree', async (req, res) => {
   try {
-    const tools = await Tool.find().limit(50);
-    res.json(tools);
+    const tree = await Tool.aggregate([{ $group: { _id: "$toolName", count: { $sum: 1 } } }]);
+    res.json(tree);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
