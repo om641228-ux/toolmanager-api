@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const cors = require('cors');
 const fetch = require('node-fetch');
-const Tool = require('../models/Tool');
+const Tool = require('./models/Tool');
 const app = express();
 const upload = multer();
 
