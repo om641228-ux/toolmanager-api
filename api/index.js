@@ -11,12 +11,12 @@ const upload = multer();
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: '50mb' }));
 
-// Подключение к MongoDB
+// Подключение к базе данных
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected'))
   .catch(err => console.error('MongoDB Error:', err));
 
-// 1. Получение дерева инструментов (для фронтенда)
+// 1. Получение дерева инструментов
 app.get('/api/tools/tree', async (req, res) => {
   try {
     const tree = await Tool.aggregate([{ $group: { _id: "$toolName", count: { $sum: 1 } } }]);
@@ -26,12 +26,12 @@ app.get('/api/tools/tree', async (req, res) => {
   }
 });
 
-// 2. УНИВЕРСАЛЬНЫЙ РОУТ: Обрабатывает и Фото, и Текст
+// 2. УНИВЕРСАЛЬНЫЙ РОУТ (Для фото и текста)
 app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
   try {
     let name, count, confidence, imageData = "";
 
-    // СЦЕНАРИЙ А: Если пришло фото
+    // ЕСЛИ ПРИШЛО ФОТО
     if (req.file) {
       const base64 = req.file.buffer.toString("base64");
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -48,12 +48,13 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
       });
       
       const data = await response.json();
-      
-      // Проверка на ошибки от Google
-      if (!data.candidates || !data.candidates[0].content) {
-        throw new Error("Gemini не смог распознать фото. Проверь баланс/ключ.");
-      }
 
+      // ПРОВЕРКА ОТВЕТА GEMINI (Защита 39-й строки)
+      if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+        console.error("Gemini Error Details:", JSON.stringify(data));
+        throw new Error(data.error?.message || "Gemini не распознал объект или ключ API не работает");
+      }
+      
       const resultText = data.candidates[0].content.parts[0].text;
       const result = JSON.parse(resultText.match(/\{.*\}/s)[0]);
       
@@ -62,9 +63,9 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
       confidence = result.confidence;
       imageData = `data:${req.file.mimetype};base64,${base64}`;
     } 
-    // СЦЕНАРИЙ Б: Если пришел только текст (через FormData или JSON)
+    // ЕСЛИ ПРИШЕЛ ПРОСТО ТЕКСТ (без фото)
     else {
-      name = req.body.name || "Неизвестный инструмент";
+      name = req.body.name || "Инструмент без названия";
       count = parseInt(req.body.count) || 1;
       confidence = "Manual Entry";
     }
@@ -80,9 +81,26 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
     res.json({ success: true, added: name, count });
 
   } catch (e) { 
-    console.error("Ошибка сервера:", e.message);
+    console.error("Ошибка на сервере:", e.message);
     res.status(500).json({ error: e.message }); 
   }
+});
+
+// Дополнительный старый роут для совместимости, если нужен
+app.post('/api/tools/add', async (req, res) => {
+    try {
+      const { name, count } = req.body;
+      const countNum = parseInt(count) || 1;
+      const toolsToAdd = Array.from({ length: countNum }, () => ({
+        toolName: name,
+        confidence: "Manual",
+        image: "" 
+      }));
+      await Tool.insertMany(toolsToAdd);
+      res.json({ success: true, added: name, count: countNum });
+    } catch (e) { 
+      res.status(500).json({ error: e.message }); 
+    }
 });
 
 module.exports = app;
