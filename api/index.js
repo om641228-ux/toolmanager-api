@@ -16,7 +16,7 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Error:', err));
 
-// 1. Получение списка инструментов
+// 1. Получение списка инструментов (для дерева)
 app.get('/api/tools/tree', async (req, res) => {
   try {
     const tree = await Tool.aggregate([{ $group: { _id: "$toolName", count: { $sum: 1 } } }]);
@@ -26,12 +26,12 @@ app.get('/api/tools/tree', async (req, res) => {
   }
 });
 
-// 2. УНИВЕРСАЛЬНЫЙ РОУТ (Для фото и текста)
+// 2. УНИВЕРСАЛЬНЫЙ РОУТ (Главный: и для фото, и для текста)
 app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
   try {
     let name, count, confidence, imageData = "";
 
-    // ЕСЛИ ПРИШЛО ФОТО
+    // СЦЕНАРИЙ А: Если пользователь загрузил ФОТО
     if (req.file) {
       const base64 = req.file.buffer.toString("base64");
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -49,9 +49,9 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
       
       const data = await response.json();
 
-      // ЗАЩИТА 39-й СТРОКИ (проверяем ответ Gemini)
+      // ЗАЩИТА 39-й СТРОКИ: Проверяем, есть ли ответ от ИИ
       if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-        console.error("Критическая ошибка Gemini:", JSON.stringify(data));
+        console.error("Ошибка Gemini:", JSON.stringify(data));
         throw new Error(data.error?.message || "Gemini не ответил. Проверь API_KEY в настройках Vercel.");
       }
       
@@ -63,14 +63,14 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
       confidence = result.confidence;
       imageData = `data:${req.file.mimetype};base64,${base64}`;
     } 
-    // ЕСЛИ ПРИШЕЛ ПРОСТО ТЕКСТ (нажата кнопка без фото)
+    // СЦЕНАРИЙ Б: Если пришел только ТЕКСТ (без файла)
     else {
-      name = req.body.name || "Инструмент";
+      name = req.body.name || "Инструмент без названия";
       count = parseInt(req.body.count) || 1;
       confidence = "Manual Entry";
     }
 
-    // Сохранение в базу
+    // Сохранение в базу MongoDB
     const toolsToAdd = Array.from({ length: count }, () => ({
       toolName: name,
       confidence: confidence,
@@ -81,12 +81,12 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
     res.json({ success: true, added: name, count });
 
   } catch (e) { 
-    console.error("Ошибка сервера:", e.message);
+    console.error("Server Error:", e.message);
     res.status(500).json({ error: e.message }); 
   }
 });
 
-// Роут для совместимости со старыми методами
+// Старый роут для совместимости (если фронтенд стучится сюда)
 app.post('/api/tools/add', async (req, res) => {
   try {
     const { name, count } = req.body;
