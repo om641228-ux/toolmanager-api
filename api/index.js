@@ -11,15 +11,16 @@ const upload = multer();
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: '50mb' }));
 
-// Подключение к базе
+// Коннект к базе
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ База MongoDB на связи'))
-  .catch(err => console.error('❌ Ошибка MongoDB:', err));
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
 // --- ЭТАП 1: ТОЛЬКО РАСПОЗНАВАНИЕ (БЕЗ СОХРАНЕНИЯ) ---
-app.post('/api/test-ai', upload.single('image'), async (req, res) => {
+// Этот роут просто возвращает ответ от ИИ, чтобы проверить API Ключ
+app.post('/api/debug/analyze', upload.single('image'), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "Нет фото для теста" });
+    if (!req.file) return res.status(400).json({ error: "Файл не получен" });
 
     const base64 = req.file.buffer.toString("base64");
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -29,7 +30,7 @@ app.post('/api/test-ai', upload.single('image'), async (req, res) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [
-          { text: "Что на фото? Ответь только названием инструмента на русском." },
+          { text: "Назови инструмент на фото одним словом на русском языке." },
           { inline_data: { mime_type: req.file.mimetype, data: base64 } }
         ]}]
       })
@@ -38,40 +39,45 @@ app.post('/api/test-ai', upload.single('image'), async (req, res) => {
     const data = await response.json();
     
     if (data.error) {
-      return res.status(500).json({ error: "Ошибка Gemini", details: data.error.message });
+      return res.status(500).json({ error: "Ошибка Google Gemini", details: data.error.message });
     }
 
     const aiText = data.candidates[0].content.parts[0].text;
-    res.json({ success: true, whatAISee: aiText });
+    res.json({ success: true, aiResult: aiText.trim() });
 
   } catch (e) {
-    res.status(500).json({ error: "Ошибка сервера при тесте ИИ", message: e.message });
+    res.status(500).json({ error: "Ошибка на Этапе 1", message: e.message });
   }
 });
 
-// --- ЭТАП 2: ТОЛЬКО ДОБАВЛЕНИЕ В БАЗУ ---
-app.post('/api/tools/add', async (req, res) => {
+// --- ЭТАП 2: ТОЛЬКО СОХРАНЕНИЕ В БАЗУ ---
+// Этот роут просто записывает текст, который ты пришлешь вручную
+app.post('/api/debug/save', async (req, res) => {
   try {
     const { name, count } = req.body;
     
-    const newTool = new Tool({
+    const newEntry = new Tool({
       toolName: name || "Тестовый инструмент",
-      confidence: "Manual",
-      image: "" // Пока без фото для простоты
+      confidence: "Manual Test",
+      image: "" // Пока без фото, чтобы проверить только базу
     });
 
-    await newTool.save();
-    res.json({ success: true, message: "В базу сохранено!", tool: newTool });
+    await newEntry.save();
+    res.json({ success: true, message: "Записано в MongoDB!", data: newEntry });
 
   } catch (e) {
-    res.status(500).json({ error: "Ошибка базы данных", message: e.message });
+    res.status(500).json({ error: "Ошибка на Этапе 2 (MongoDB)", message: e.message });
   }
 });
 
-// Роут для получения списка (чтобы видеть результат)
+// Получение списка (проверка дерева)
 app.get('/api/tools/tree', async (req, res) => {
-  const tools = await Tool.find().limit(10);
-  res.json(tools);
+  try {
+    const tools = await Tool.find().limit(50);
+    res.json(tools);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = app;
