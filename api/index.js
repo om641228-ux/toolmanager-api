@@ -11,12 +11,12 @@ const upload = multer();
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: '50mb' }));
 
-// Подключение к базе данных
+// Подключение к MongoDB
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB Connected'))
-  .catch(err => console.error('MongoDB Error:', err));
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => console.error('❌ MongoDB Error:', err));
 
-// 1. Получение дерева инструментов
+// 1. Получение списка инструментов
 app.get('/api/tools/tree', async (req, res) => {
   try {
     const tree = await Tool.aggregate([{ $group: { _id: "$toolName", count: { $sum: 1 } } }]);
@@ -49,10 +49,10 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
       
       const data = await response.json();
 
-      // ПРОВЕРКА ОТВЕТА GEMINI (Защита 39-й строки)
+      // ЗАЩИТА 39-й СТРОКИ (проверяем ответ Gemini)
       if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-        console.error("Gemini Error Details:", JSON.stringify(data));
-        throw new Error(data.error?.message || "Gemini не распознал объект или ключ API не работает");
+        console.error("Критическая ошибка Gemini:", JSON.stringify(data));
+        throw new Error(data.error?.message || "Gemini не ответил. Проверь API_KEY в настройках Vercel.");
       }
       
       const resultText = data.candidates[0].content.parts[0].text;
@@ -63,9 +63,9 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
       confidence = result.confidence;
       imageData = `data:${req.file.mimetype};base64,${base64}`;
     } 
-    // ЕСЛИ ПРИШЕЛ ПРОСТО ТЕКСТ (без фото)
+    // ЕСЛИ ПРИШЕЛ ПРОСТО ТЕКСТ (нажата кнопка без фото)
     else {
-      name = req.body.name || "Инструмент без названия";
+      name = req.body.name || "Инструмент";
       count = parseInt(req.body.count) || 1;
       confidence = "Manual Entry";
     }
@@ -81,26 +81,25 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
     res.json({ success: true, added: name, count });
 
   } catch (e) { 
-    console.error("Ошибка на сервере:", e.message);
+    console.error("Ошибка сервера:", e.message);
     res.status(500).json({ error: e.message }); 
   }
 });
 
-// Дополнительный старый роут для совместимости, если нужен
+// Роут для совместимости со старыми методами
 app.post('/api/tools/add', async (req, res) => {
-    try {
-      const { name, count } = req.body;
-      const countNum = parseInt(count) || 1;
-      const toolsToAdd = Array.from({ length: countNum }, () => ({
-        toolName: name,
-        confidence: "Manual",
-        image: "" 
-      }));
-      await Tool.insertMany(toolsToAdd);
-      res.json({ success: true, added: name, count: countNum });
-    } catch (e) { 
-      res.status(500).json({ error: e.message }); 
-    }
+  try {
+    const { name, count } = req.body;
+    const toolsToAdd = Array.from({ length: parseInt(count) || 1 }, () => ({
+      toolName: name || "Инструмент",
+      confidence: "Direct Add",
+      image: "" 
+    }));
+    await Tool.insertMany(toolsToAdd);
+    res.json({ success: true, added: name, count: toolsToAdd.length });
+  } catch (e) { 
+    res.status(500).json({ error: e.message }); 
+  }
 });
 
 module.exports = app;
