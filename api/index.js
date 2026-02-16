@@ -11,12 +11,12 @@ const upload = multer();
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: '50mb' }));
 
-// Подключение к базе данных
+// Подключение к MongoDB
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected'))
   .catch(err => console.error('MongoDB Error:', err));
 
-// 1. Получение инвентаря для дерева
+// 1. Получение дерева инструментов (для фронтенда)
 app.get('/api/tools/tree', async (req, res) => {
   try {
     const tree = await Tool.aggregate([{ $group: { _id: "$toolName", count: { $sum: 1 } } }]);
@@ -26,12 +26,12 @@ app.get('/api/tools/tree', async (req, res) => {
   }
 });
 
-// 2. УНИВЕРСАЛЬНЫЙ РОУТ (Для фото и текста)
+// 2. УНИВЕРСАЛЬНЫЙ РОУТ: Обрабатывает и Фото, и Текст
 app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
   try {
     let name, count, confidence, imageData = "";
 
-    // ЕСЛИ ПОЛЬЗОВАТЕЛЬ ЗАГРУЗИЛ ФОТО
+    // СЦЕНАРИЙ А: Если пришло фото
     if (req.file) {
       const base64 = req.file.buffer.toString("base64");
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
@@ -49,8 +49,11 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
       
       const data = await response.json();
       
-      if (!data.candidates) throw new Error("Gemini не ответил. Проверь API ключ.");
-      
+      // Проверка на ошибки от Google
+      if (!data.candidates || !data.candidates[0].content) {
+        throw new Error("Gemini не смог распознать фото. Проверь баланс/ключ.");
+      }
+
       const resultText = data.candidates[0].content.parts[0].text;
       const result = JSON.parse(resultText.match(/\{.*\}/s)[0]);
       
@@ -59,14 +62,14 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
       confidence = result.confidence;
       imageData = `data:${req.file.mimetype};base64,${base64}`;
     } 
-    // ЕСЛИ ЭТО ПРОСТО ТЕКСТ (нажата кнопка без фото)
+    // СЦЕНАРИЙ Б: Если пришел только текст (через FormData или JSON)
     else {
       name = req.body.name || "Неизвестный инструмент";
       count = parseInt(req.body.count) || 1;
       confidence = "Manual Entry";
     }
 
-    // Сохранение в базу (создаем массив объектов)
+    // Сохранение в базу
     const toolsToAdd = Array.from({ length: count }, () => ({
       toolName: name,
       confidence: confidence,
