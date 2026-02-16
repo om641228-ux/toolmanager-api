@@ -11,37 +11,51 @@ const upload = multer();
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: '50mb' }));
 
+// Подключение к MongoDB
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB Connected'))
-  .catch(err => console.error(err));
+  .catch(err => console.error('MongoDB Error:', err));
 
 // 1. Получение инвентаря (GET)
 app.get('/api/tools/tree', async (req, res) => {
   try {
     const tree = await Tool.aggregate([{ $group: { _id: "$toolName", count: { $sum: 1 } } }]);
     res.json(tree);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { 
+    res.status(500).json({ error: e.message }); 
+  }
 });
 
-// 2. НОВЫЙ РОУТ: Добавление из текста Gemini (POST)
+// 2. Исправленный роут добавления (POST)
 app.post('/api/tools/add', async (req, res) => {
   try {
     const { name, count } = req.body;
-    const toolsToAdd = Array.from({ length: Number(count) }, () => ({
-      toolName: name,
+    
+    // Безопасное преобразование числа
+    const countNum = parseInt(count) || 1;
+    const finalName = name || "Неизвестный инструмент";
+
+    // Создаем массив объектов
+    const toolsToAdd = Array.from({ length: countNum }, () => ({
+      toolName: finalName,
       confidence: "AI Text 2.0",
       image: "" 
     }));
+    
     await Tool.insertMany(toolsToAdd);
-    res.json({ success: true, added: name, count });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    res.json({ success: true, added: finalName, count: countNum });
+  } catch (e) { 
+    console.error("Ошибка при добавлении:", e.message);
+    res.status(500).json({ error: e.message }); 
+  }
 });
 
-// 3. Анализ по фото (Твой старый метод)
+// 3. Анализ по фото (Старый метод)
 app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
   try {
     const base64 = req.file.buffer.toString("base64");
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -52,24 +66,22 @@ app.post('/api/analyze-tool', upload.single('image'), async (req, res) => {
         ]}]
       })
     });
+    
     const data = await response.json();
     const resultText = data.candidates[0].content.parts[0].text;
     const result = JSON.parse(resultText.match(/\{.*\}/s)[0]);
+    
     const newTool = new Tool({
       toolName: result.toolName,
       confidence: result.confidence,
       image: `data:${req.file.mimetype};base64,${base64}`
     });
+    
     await newTool.save();
-    res.json(newTool);
-  } catch (e) { res.status(500).json({error: e.message}); }
+    res.json({ success: true, tool: newTool });
+  } catch (e) { 
+    res.status(500).json({ error: e.message }); 
+  }
 });
 
-app.delete('/api/tools/:id', async (req, res) => {
-  await Tool.findByIdAndDelete(req.params.id);
-  res.json({ success: true });
-});
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server on ${PORT}`));
 module.exports = app;
