@@ -1,7 +1,7 @@
 const { MongoClient } = require('mongodb');
 
-// Твоя строка с замененными ! на %21
-const uri = "mongodb+srv://oleg:MMA38%21%21%21MVM37%21%21%21@toolmanager.eqbcjbw.mongodb.net/?retryWrites=true&w=majority";
+// 
+const uri = "mongodb+srv://oleg:MMA38IMVM37O@toolmanager.eqbcjbw.mongodb.net/?retryWrites=true&w=majority";
 
 async function run() {
     const client = new MongoClient(uri);
