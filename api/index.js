@@ -7,19 +7,15 @@ require("dotenv").config();
 
 const app = express();
 
-// 1. ИСПРАВЛЕНИЕ CORS: Разрешаем доступ сайту на Netlify
+// 1. НАСТРОЙКА CORS (Максимально разрешающая для тестов)
 app.use(cors({
-  origin: [
-    "https://astonishing-gumption-2b9bfc.netlify.app",
-    "http://localhost:3000"
-  ],
-  methods: ["GET", "POST"],
-  credentials: true
+  origin: "*", 
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 app.use(express.json());
 
-// Настройка multer (хранение фото в оперативной памяти)
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
@@ -35,7 +31,7 @@ const ToolSchema = new mongoose.Schema({
 });
 const Tool = mongoose.model("Tool", ToolSchema);
 
-// 3. НАСТРОЙКА ИИ (Используем модель из твоего списка)
+// 3. НАСТРОЙКА ИИ
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // --- РОУТЫ ---
@@ -45,8 +41,8 @@ app.post("/api/analyze", upload.single("image"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Файл не найден" });
 
-    // Указываем точно работающую модель
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    // Используем проверенную модель из твоего списка
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const imageParts = [
       {
@@ -71,7 +67,7 @@ app.post("/api/analyze", upload.single("image"), async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Ошибка ИИ:", error);
-    res.status(500).json({ error: "Ошибка при анализе изображения" });
+    res.status(500).json({ error: "Ошибка при анализе" });
   }
 });
 
@@ -87,7 +83,7 @@ app.post("/api/save-tool", async (req, res) => {
   }
 });
 
-// Получение списка (дерево инструментов)
+// Получение списка
 app.get("/api/tools/tree", async (req, res) => {
   try {
     const tree = await Tool.aggregate([
@@ -98,6 +94,9 @@ app.get("/api/tools/tree", async (req, res) => {
     res.status(500).json({ error: "Ошибка загрузки данных" });
   }
 });
+
+// Для проверки работы сервера
+app.get("/", (req, res) => res.send("Server is running!"));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
