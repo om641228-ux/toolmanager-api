@@ -1,75 +1,96 @@
-require('dotenv').config();
-const express = require('express');
-const mongoose = require('mongoose');
-const multer = require('multer');
-const cors = require('cors');
-const fetch = require('node-fetch');
-const Tool = require('./models/Tool');
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const multer = require("multer");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+require("dotenv").config();
 
 const app = express();
-const upload = multer();
+app.use(cors());
+app.use(express.json());
 
-app.use(cors({ origin: "*" }));
-app.use(express.json({ limit: '50mb' }));
+// Настройка хранилища для фото в памяти
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB Connected'))
-  .catch(err => console.error('❌ MongoDB Error:', err));
+// Подключение к MongoDB
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch(err => console.error("❌ MongoDB Error:", err));
 
-// РОУТ 1: Распознавание через ИИ
-app.post('/api/analyze', upload.single('image'), async (req, res) => {
+// Схема базы данных
+const ToolSchema = new mongoose.Schema({
+  name: String,
+  image: String, // Base64
+  date: { type: Date, default: Date.now }
+});
+const Tool = mongoose.model("Tool", ToolSchema);
+
+// Инициализация Google AI (Ключ берется из настроек Vercel)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// --- РОУТЫ ---
+
+// 1. Анализ изображения через ИИ
+app.post("/api/analyze", upload.single("image"), async (req, res) => {
   try {
-    if (!req.file) throw new Error("Файл не получен");
-    const base64 = req.file.buffer.toString("base64");
-    
-    // Запрос к Gemini (делает сервер, поэтому 403 не будет)
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-    
-    const aiResponse = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [
-          { text: "Назови инструмент на фото ОДНИМ словом на русском языке. Ответ дай в формате JSON: {\"toolName\": \"название\"}" },
-          { inline_data: { mime_type: req.file.mimetype, data: base64 } }
-        ]}]
-      })
-    });
-    
-    const data = await aiResponse.json();
-    const aiText = data.candidates[0].content.parts[0].text;
-    const aiResult = JSON.parse(aiText.match(/\{.*\}/s)[0]); // Вытаскиваем JSON из текста
+    if (!req.file) {
+      return res.status(400).json({ error: "Файл не загружен" });
+    }
+
+    // Используем проверенную модель из твоего списка
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    const imageParts = [
+      {
+        inlineData: {
+          data: req.file.buffer.toString("base64"),
+          mimeType: req.file.mimetype,
+        },
+      },
+    ];
+
+    const result = await model.generateContent([
+      "Назови одним или двумя словами на русском языке, какой строительный инструмент на фото. Верни только название.",
+      ...imageParts,
+    ]);
+
+    const toolName = result.response.text().trim();
     
     res.json({ 
       success: true, 
-      toolName: aiResult.toolName, 
-      imageData: `data:${req.file.mimetype};base64,${base64}` 
+      toolName, 
+      imageData: req.file.buffer.toString("base64") 
     });
-  } catch (e) {
-    res.status(500).json({ error: "Ошибка ИИ", details: e.message });
+  } catch (error) {
+    console.error("❌ Ошибка ИИ:", error);
+    res.status(500).json({ error: "Ошибка при анализе ИИ" });
   }
 });
 
-// РОУТ 2: Сохранение в базу
-app.post('/api/save-tool', async (req, res) => {
+// 2. Сохранение в базу
+app.post("/api/save-tool", async (req, res) => {
   try {
     const { toolName, imageData } = req.body;
-    const newTool = new Tool({ toolName, image: imageData });
+    const newTool = new Tool({ name: toolName, image: imageData });
     await newTool.save();
     res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+  } catch (error) {
+    res.status(500).json({ error: "Ошибка сохранения" });
   }
 });
 
-// РОУТ 3: Получение списка
-app.get('/api/tools/tree', async (req, res) => {
+// 3. Получение списка (агрегация по именам)
+app.get("/api/tools/tree", async (req, res) => {
   try {
-    const tree = await Tool.aggregate([{ $group: { _id: "$toolName", count: { $sum: 1 } } }]);
+    const tree = await Tool.aggregate([
+      { $group: { _id: "$name", count: { $sum: 1 } } }
+    ]);
     res.json(tree);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+  } catch (error) {
+    res.status(500).json({ error: "Ошибка загрузки данных" });
   }
 });
 
-module.exports = app;
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
