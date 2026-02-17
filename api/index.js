@@ -6,39 +6,46 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 require("dotenv").config();
 
 const app = express();
-app.use(cors());
+
+// 1. ИСПРАВЛЕНИЕ CORS: Разрешаем доступ сайту на Netlify
+app.use(cors({
+  origin: [
+    "https://astonishing-gumption-2b9bfc.netlify.app",
+    "http://localhost:3000"
+  ],
+  methods: ["GET", "POST"],
+  credentials: true
+}));
+
 app.use(express.json());
 
-// Настройка хранилища для фото в памяти
+// Настройка multer (хранение фото в оперативной памяти)
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// Подключение к MongoDB
+// 2. ПОДКЛЮЧЕНИЕ К MONGODB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ MongoDB Connected"))
   .catch(err => console.error("❌ MongoDB Error:", err));
 
-// Схема базы данных
 const ToolSchema = new mongoose.Schema({
   name: String,
-  image: String, // Base64
+  image: String,
   date: { type: Date, default: Date.now }
 });
 const Tool = mongoose.model("Tool", ToolSchema);
 
-// Инициализация Google AI (Ключ берется из настроек Vercel)
+// 3. НАСТРОЙКА ИИ (Используем модель из твоего списка)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // --- РОУТЫ ---
 
-// 1. Анализ изображения через ИИ
+// Анализ изображения
 app.post("/api/analyze", upload.single("image"), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: "Файл не загружен" });
-    }
+    if (!req.file) return res.status(400).json({ error: "Файл не найден" });
 
-    // Используем проверенную модель из твоего списка
+    // Указываем точно работающую модель
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const imageParts = [
@@ -64,11 +71,11 @@ app.post("/api/analyze", upload.single("image"), async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Ошибка ИИ:", error);
-    res.status(500).json({ error: "Ошибка при анализе ИИ" });
+    res.status(500).json({ error: "Ошибка при анализе изображения" });
   }
 });
 
-// 2. Сохранение в базу
+// Сохранение инструмента
 app.post("/api/save-tool", async (req, res) => {
   try {
     const { toolName, imageData } = req.body;
@@ -80,7 +87,7 @@ app.post("/api/save-tool", async (req, res) => {
   }
 });
 
-// 3. Получение списка (агрегация по именам)
+// Получение списка (дерево инструментов)
 app.get("/api/tools/tree", async (req, res) => {
   try {
     const tree = await Tool.aggregate([
@@ -93,4 +100,4 @@ app.get("/api/tools/tree", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
