@@ -1,37 +1,57 @@
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const multer = require("multer");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const app = express();
+
+// 1. Жёсткая настройка CORS для Netlify
+app.use(cors({
+  origin: "https://astonishing-gumption-2b9bfc.netlify.app",
+  methods: ["POST", "GET", "OPTIONS"],
+  allowedHeaders: ["Content-Type"]
+}));
+
+app.use(express.json());
+const upload = multer({ storage: multer.memoryStorage() });
+
+// 2. Подключение к базе (используем исправленное имя)
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch(err => console.error("❌ DB Error:", err.message));
+
+const Tool = mongoose.model("Tool", new mongoose.Schema({
+  name: String, image: String, date: { type: Date, default: Date.now }
+}));
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
 app.post("/api/analyze", upload.single("image"), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "No image uploaded" });
+    if (!req.file) return res.status(400).json({ error: "No image" });
 
-    // Инициализация модели
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent([
+      "Назови инструмент на фото одним словом на русском.",
+      { inlineData: { data: req.file.buffer.toString("base64"), mimeType: req.file.mimetype } }
+    ]);
 
-    // Подготовка данных для Google: преобразуем буфер в объект нужного формата
-    const imageParts = [
-      {
-        inlineData: {
-          data: req.file.buffer.toString("base64"),
-          mimeType: req.file.mimetype // Берем тип (image/jpeg, image/png) прямо из файла
-        }
-      }
-    ];
-
-    const prompt = "Назови инструмент на фото одним словом на русском.";
-
-    // Отправка запроса в Google
-    const result = await model.generateContent([prompt, ...imageParts]);
-    const response = await result.response;
-    const toolName = response.text().trim();
-
-    // Сохранение в базу (используем ту переменную, что у тебя в настройках)
-    const newTool = new Tool({ 
-      name: toolName, 
-      image: req.file.buffer.toString("base64") 
-    });
+    const toolName = result.response.text().trim();
+    const newTool = new Tool({ name: toolName, image: req.file.buffer.toString("base64") });
     await newTool.save();
 
     res.json({ success: true, toolName, imageData: newTool.image });
   } catch (error) {
-    console.error("Google AI Error:", error.message);
-    res.status(500).json({ error: "Ошибка ИИ: " + error.message });
+    res.status(500).json({ error: error.message });
   }
 });
+
+app.get("/api/tools/tree", async (req, res) => {
+  try {
+    const tools = await Tool.find().sort({ date: -1 });
+    res.json(tools);
+  } catch (e) { res.status(500).json([]); }
+});
+
+module.exports = app;
