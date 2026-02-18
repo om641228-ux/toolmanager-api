@@ -6,7 +6,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 
-// 1. Разрешаем большие файлы и CORS
+// 1. Увеличиваем лимиты для тяжелых фото и настраиваем доступ для Netlify
 app.use(cors({
   origin: "https://astonishing-gumption-2b9bfc.netlify.app",
   methods: ["POST", "GET", "OPTIONS"],
@@ -21,22 +21,18 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ MongoDB Connected"))
   .catch(err => console.error("❌ DB Error:", err.message));
 
-const ToolSchema = new mongoose.Schema({
-  name: String,
-  image: String, // Base64 строка
-  date: { type: Date, default: Date.now }
-});
-const Tool = mongoose.model("Tool", ToolSchema);
+const Tool = mongoose.model("Tool", new mongoose.Schema({
+  name: String, image: String, date: { type: Date, default: Date.now }
+}));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Маршрут анализа (уже работает)
 app.post("/api/analyze", upload.single("image"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No image" });
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const result = await model.generateContent([
-      "Назови инструмент на фото ОДНИМ словом на русском языке.",
+      "Назови инструмент на фото одним словом на русском.",
       { inlineData: { data: req.file.buffer.toString("base64"), mimeType: req.file.mimetype } }
     ]);
     const toolName = result.response.text().trim();
@@ -46,20 +42,18 @@ app.post("/api/analyze", upload.single("image"), async (req, res) => {
   }
 });
 
-// Маршрут сохранения (исправляем его)
+// Новый маршрут для сохранения, который не будет выдавать ошибку 413
 app.post("/api/save-tool", async (req, res) => {
   try {
     const { name, image } = req.body;
     const newTool = new Tool({ name, image });
     await newTool.save();
-    res.json({ success: true, message: "Инструмент сохранен!" });
+    res.json({ success: true, message: "Сохранено в базу!" });
   } catch (error) {
-    console.error("Save Error:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Получение списка
 app.get("/api/tools/tree", async (req, res) => {
   try {
     const tools = await Tool.find().sort({ date: -1 });
