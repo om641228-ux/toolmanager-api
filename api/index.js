@@ -42,7 +42,7 @@ app.post("/api/analyze", upload.single("image"), async (req, res) => {
   }
 });
 
-// Новый маршрут для сохранения, который не будет выдавать ошибку 413
+// Исправленный маршрут сохранения с поддержкой больших файлов
 app.post("/api/save-tool", async (req, res) => {
   try {
     const { name, image } = req.body;
