@@ -6,7 +6,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 
-// 1. Жёсткая настройка CORS для Netlify
+// Жестко разрешаем доступ только твоему сайту
 app.use(cors({
   origin: "https://astonishing-gumption-2b9bfc.netlify.app",
   methods: ["POST", "GET", "OPTIONS"],
@@ -16,7 +16,7 @@ app.use(cors({
 app.use(express.json());
 const upload = multer({ storage: multer.memoryStorage() });
 
-// 2. Подключение к базе (используем исправленное имя)
+// Подключаемся к базе через твою переменную MONGODB_URI
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ MongoDB Connected"))
   .catch(err => console.error("❌ DB Error:", err.message));
@@ -43,6 +43,7 @@ app.post("/api/analyze", upload.single("image"), async (req, res) => {
 
     res.json({ success: true, toolName, imageData: newTool.image });
   } catch (error) {
+    console.error("API Error:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
