@@ -1,40 +1,48 @@
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-// Добавь здесь другие импорты своих роутов, если они были
+require('dotenv').config();
 
 const app = express();
 
-// ИСПРАВЛЕНИЕ CORS: Разрешаем запросы с любого адреса
+// ИСПРАВЛЕНИЕ CORS: Теперь сервер примет запросы от любого твоего домена
 app.use(cors({
-    origin: '*', 
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+  origin: '*', 
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
 
-// Твой URL для подключения к MongoDB (убедись, что он правильный)
-const MONGODB_URI = process.env.MONGODB_URI || "твой_адрес_монго_из_vercel_env";
+// Подключение к базе (используем переменную из Vercel)
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
-mongoose.connect(MONGODB_URI)
-    .then(() => console.log('✅ MongoDB Connected'))
-    .catch(err => console.error('❌ MongoDB Connection Error:', err));
-
-// ПРИМЕР РОУТА (оставь свои существующие роуты здесь)
-app.get('/api/tools/tree', async (req, res) => {
-    try {
-        // Твоя логика получения данных из базы
-        res.json({ message: "Данные успешно получены" });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+// Твой основной роут для анализа (судя по логам, он вызывается чаще всего)
+app.post('/api/analyze', async (req, res) => {
+  try {
+    // Здесь твоя логика анализа через ИИ
+    res.status(200).json({ success: true, message: "Анализ выполнен" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// Важно для Vercel
+// Роут для получения списка инструментов
+app.get('/api/tools', async (req, res) => {
+  try {
+    // Здесь получение данных из коллекции
+    res.status(200).json({ tools: [] }); 
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Экспорт для Vercel
 module.exports = app;
 
 const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));
 }
