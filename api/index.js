@@ -10,47 +10,47 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '10mb' }));
 
-// Подключение к MongoDB
+// Подключение к базе
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ База подключена'))
-  .catch(err => console.error('❌ Ошибка базы:', err));
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => console.error('❌ DB Error:', err));
 
-const Tool = mongoose.model('Tool', new mongoose.Schema({
+const ToolSchema = new mongoose.Schema({
   name: String,
   category: String,
   imageUrl: String,
   date: { type: Date, default: Date.now }
-}));
+});
+const Tool = mongoose.model('Tool', ToolSchema);
 
-// РОУТ АНАЛИЗА ФОТО (Распознавание)
+// Роут распознавания через Gemini
 app.post('/api/analyze', async (req, res) => {
   try {
     const { image } = req.body;
-    if (!image) return res.status(400).json({ error: "Нет изображения" });
+    if (!image) return res.status(400).json({ error: "No image provided" });
 
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const base64Data = image.split(",")[1];
 
     const result = await model.generateContent([
-      "Что за строительный инструмент на фото? Ответь только в формате JSON: {\"name\": \"название\", \"category\": \"категория\"}",
+      "Идентифицируй строительный инструмент на фото. Ответь только валидным JSON: {\"name\": \"название\", \"category\": \"категория\"}",
       { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
     ]);
 
-    const text = result.response.text();
-    const cleanJson = text.replace(/```json|```/g, "").trim();
-    res.json(JSON.parse(cleanJson));
+    const text = result.response.text().replace(/```json|```/g, "").trim();
+    res.json(JSON.parse(text));
   } catch (error) {
-    console.error("ИИ Ошибка:", error);
-    res.status(500).json({ name: "Не определено", category: "инструмент" });
+    console.error(error);
+    res.status(500).json({ name: "Не удалось распознать", category: "Инструмент" });
   }
 });
 
-// РОУТ СОХРАНЕНИЯ В БАЗУ
+// Роут сохранения
 app.post('/api/save-tool', async (req, res) => {
   try {
-    const newTool = new Tool(req.body);
-    await newTool.save();
-    res.json({ success: true, message: "Сохранено!" });
+    const tool = new Tool(req.body);
+    await tool.save();
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
