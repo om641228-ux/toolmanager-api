@@ -1,15 +1,19 @@
 const { MongoClient } = require('mongodb');
 
-// 
-const uri = "mongodb+srv://oleg:MMA38IMVM37O@toolmanager.eqbcjbw.mongodb.net/?retryWrites=true&w=majority";
+// Твоя проверенная строка из настроек Vercel
+const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager?retryWrites=true&w=majority";
 
 async function run() {
     const client = new MongoClient(uri);
     try {
         await client.connect();
-        console.log("УРА! Подключение к MongoDB успешно!");
-    } catch (e) {
-        console.error("ОШИБКА ПОДКЛЮЧЕНИЯ:", e.message);
+        console.log("🚀 СОЕДИНЕНИЕ УСТАНОВЛЕНО!");
+        const db = client.db("test");
+        const tools = await db.collection("tools").find().toArray();
+        console.log("📦 НАЙДЕНО ИНСТРУМЕНТОВ В БАЗЕ:", tools.length);
+        console.log("ПОСЛЕДНИЙ ДОБАВЛЕННЫЙ:", tools[tools.length - 1]?.name || "Пусто");
+    } catch (err) {
+        console.error("❌ ОШИБКА:", err);
     } finally {
         await client.close();
     }
