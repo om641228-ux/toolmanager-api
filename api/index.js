@@ -9,8 +9,8 @@ app.use(express.json({ limit: '10mb' }));
 const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
 
-// Универсальный обработчик для пути /api
-app.get('/api', async (req, res) => {
+// Функция получения данных
+async function getTools(req, res) {
     try {
         await client.connect();
         const db = client.db("toolmanager");
@@ -19,21 +19,10 @@ app.get('/api', async (req, res) => {
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
-});
+}
 
-// Обработчик для сохранения
-app.post('/api', async (req, res) => {
-    try {
-        await client.connect();
-        const db = client.db("toolmanager");
-        const result = await db.collection("tools").insertOne({
-            ...req.body,
-            date: new Date()
-        });
-        res.status(201).json(result);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
+// Слушаем оба варианта пути
+app.get('/api/tools', getTools);
+app.get('/api', getTools);
 
 module.exports = app;
