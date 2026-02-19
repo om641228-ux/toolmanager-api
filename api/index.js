@@ -5,44 +5,49 @@ require('dotenv').config();
 
 const app = express();
 
-// ИСПРАВЛЕНИЕ CORS: Теперь сервер примет запросы от любого твоего домена
+// 1. ИСПРАВЛЯЕМ CORS (чтобы распознавание заработало)
 app.use(cors({
-  origin: '*', 
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: '*', // Разрешаем любым доменам (включая твой Netlify) обращаться к API
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type']
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Увеличиваем лимит для приема фото
 
-// Подключение к базе (используем переменную из Vercel)
+// 2. ПОДКЛЮЧЕНИЕ К БАЗЕ
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ MongoDB Connected'))
-  .catch(err => console.error('❌ MongoDB Connection Error:', err));
+  .then(() => console.log('✅ База подключена'))
+  .catch(err => console.error('❌ Ошибка базы:', err));
 
-// Твой основной роут для анализа (судя по логам, он вызывается чаще всего)
+// Схема данных
+const ToolSchema = new mongoose.Schema({
+  name: String,
+  category: String,
+  date: { type: Date, default: Date.now }
+});
+const Tool = mongoose.model('Tool', ToolSchema);
+
+// 3. РОУТ РАСПОЗНАВАНИЯ
 app.post('/api/analyze', async (req, res) => {
   try {
-    // Здесь твоя логика анализа через ИИ
-    res.status(200).json({ success: true, message: "Анализ выполнен" });
+    // Здесь должна быть твоя логика OpenAI/Gemini
+    // Для теста возвращаем заглушку, которая точно не будет undefined
+    res.json({ name: "Плоскогубцы", category: "ручной" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Роут для получения списка инструментов
-app.get('/api/tools', async (req, res) => {
+// 4. РОУТ ДОБАВЛЕНИЯ В БАЗУ
+app.post('/api/save-tool', async (req, res) => {
   try {
-    // Здесь получение данных из коллекции
-    res.status(200).json({ tools: [] }); 
+    const { name, category } = req.body;
+    const newTool = new Tool({ name, category });
+    await newTool.save();
+    res.json({ success: true, message: "Инструмент в базе!" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Экспорт для Vercel
 module.exports = app;
-
-const PORT = process.env.PORT || 5000;
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));
-}
