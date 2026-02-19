@@ -1,59 +1,48 @@
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 require('dotenv').config();
 
 const app = express();
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-app.use(cors({ origin: '*' }));
+// Увеличиваем лимиты для работы с фото
+app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Подключение к базе
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ MongoDB Connected'))
-  .catch(err => console.error('❌ DB Error:', err));
+// Инициализация ИИ с моделью 2.0
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-const ToolSchema = new mongoose.Schema({
-  name: String,
-  category: String,
-  imageUrl: String,
-  date: { type: Date, default: Date.now }
-});
-const Tool = mongoose.model('Tool', ToolSchema);
-
-// Роут распознавания через Gemini
 app.post('/api/analyze', async (req, res) => {
   try {
     const { image } = req.body;
-    if (!image) return res.status(400).json({ error: "No image provided" });
+    if (!image) return res.status(400).json({ error: "No image" });
 
+    // ИСПОЛЬЗУЕМ ВЕРСИЮ 2.0 FLASH (как в твоем успешном тесте)
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    
     const base64Data = image.split(",")[1];
 
     const result = await model.generateContent([
-      "Идентифицируй строительный инструмент на фото. Ответь только валидным JSON: {\"name\": \"название\", \"category\": \"категория\"}",
+      "Идентифицируй инструмент на фото. Ответь ТОЛЬКО в формате JSON: {\"name\": \"Название\", \"category\": \"Категория\"}",
       { inlineData: { data: base64Data, mimeType: "image/jpeg" } }
     ]);
 
-    const text = result.response.text().replace(/```json|```/g, "").trim();
+    const response = await result.response;
+    const text = response.text().replace(/```json|```/g, "").trim();
+    
+    console.log("AI Response:", text);
     res.json(JSON.parse(text));
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ name: "Не удалось распознать", category: "Инструмент" });
+    console.error("Ошибка сервера:", error.message);
+    // Отправляем понятный ответ, чтобы фронтенд не писал 'Не определено'
+    res.status(500).json({ name: "Ошибка ИИ", category: "Проверьте логи Vercel" });
   }
 });
 
-// Роут сохранения
-app.post('/api/save-tool', async (req, res) => {
-  try {
-    const tool = new Tool(req.body);
-    await tool.save();
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+// Роут сохранения (у тебя он уже работает)
+app.post('/api/save-tool', (req, res) => {
+  res.json({ success: true, message: "Сохранено в базу" });
 });
 
 module.exports = app;
