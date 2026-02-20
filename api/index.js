@@ -3,28 +3,33 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
-app.use(cors());
+// Настройка CORS: разрешаем всё, чтобы Netlify мог достучаться
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type']
+}));
+
 app.use(express.json({ limit: '10mb' }));
 
 const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
 
-// Глобальная переменная для базы
-let db;
+let cachedDb = null;
 
-async function connectDB() {
-    if (!db) {
-        await client.connect();
-        db = client.db("toolmanager");
-    }
-    return db;
+async function getDb() {
+    if (cachedDb) return cachedDb;
+    await client.connect();
+    cachedDb = client.db("toolmanager");
+    return cachedDb;
 }
 
+// Маршрут для списка (склада)
 app.get('/api/tools', async (req, res) => {
     try {
-        const database = await connectDB();
-        const tools = await database.collection("tools").find().toArray();
-        res.status(200).json(tools); // Отдаем все 43 позиции
+        const db = await getDb();
+        const tools = await db.collection("tools").find().toArray();
+        res.status(200).json(tools);
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -33,11 +38,11 @@ app.get('/api/tools', async (req, res) => {
 // Маршрут для ИИ
 app.post('/api/identify', async (req, res) => {
     try {
-        const database = await connectDB();
-        const tools = await database.collection("tools").find().toArray();
-        // Берем случайный инструмент для имитации ИИ
-        const luckyTool = tools[Math.floor(Math.random() * tools.length)];
-        res.json({ success: true, name: luckyTool.name });
+        const db = await getDb();
+        const tools = await db.collection("tools").find().toArray();
+        // Имитация ИИ: берем инструмент из твоих 43
+        const tool = tools[Math.floor(Math.random() * tools.length)];
+        res.json({ success: true, name: tool.name });
     } catch (e) {
         res.status(500).json({ success: false });
     }
