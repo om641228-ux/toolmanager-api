@@ -9,17 +9,25 @@ app.use(express.json({ limit: '10mb' }));
 const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
 
-// Функция для безопасного получения данных
-app.get('/api/tools', async (req, res) => {
+// Маршрут для распознавания инструмента
+app.post('/api/identify', async (req, res) => {
     try {
         await client.connect();
         const db = client.db("toolmanager");
         const tools = await db.collection("tools").find().toArray();
-        // Всегда возвращаем массив, даже если он пустой, чтобы не было ошибки .map()
-        res.status(200).json(Array.isArray(tools) ? tools : []);
+        
+        // В будущем здесь будет вызов модели ИИ. 
+        // Сейчас мы имитируем выбор лучшего совпадения из твоих 43 инструментов
+        const identified = tools[Math.floor(Math.random() * tools.length)];
+        
+        res.status(200).json({
+            success: true,
+            name: identified.name,
+            category: identified.category,
+            image: identified.image
+        });
     } catch (e) {
-        console.error("DB Error:", e);
-        res.status(500).json([]); // Возвращаем пустой массив при ошибке
+        res.status(500).json({ success: false, error: e.message });
     } finally {
         await client.close();
     }
