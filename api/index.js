@@ -2,50 +2,37 @@ const { MongoClient } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const app = express();
-const database = client.db("toolmanager"); // Проверь это имя!
-const tools = await database.collection("tools").find().toArray();
 
-// Снимаем блокировку CORS для Netlify
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type']
-}));
-
+app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
 
-let dbInstance = null;
-
-async function getDb() {
-    if (dbInstance) return dbInstance;
+// Функция для работы с БД без лишних переподключений
+async function getToolsCollection() {
     await client.connect();
-    dbInstance = client.db("toolmanager");
-    return dbInstance;
+    return client.db("toolmanager").collection("tools");
 }
 
-// Маршрут для получения всех 43 инструментов
 app.get('/api/tools', async (req, res) => {
     try {
-        const db = await getDb();
-        const tools = await db.collection("tools").find().toArray();
-        res.status(200).json(tools);
+        const collection = await getToolsCollection();
+        const tools = await collection.find({}).toArray();
+        console.log("Found tools:", tools.length);
+        res.status(200).json(tools); // Должно вернуть 43 инструмента
     } catch (e) {
-        console.error(e);
-        res.status(500).json([]); // Возвращаем пустой массив вместо ошибки 500
+        res.status(500).json({ error: "DB_ERROR", details: e.message });
     }
 });
 
-// Маршрут для распознавания
 app.post('/api/identify', async (req, res) => {
     try {
-        const db = await getDb();
-        const tools = await db.collection("tools").find().toArray();
-        // Имитация ИИ: выбираем инструмент из базы
-        const tool = tools[Math.floor(Math.random() * tools.length)];
-        res.json({ success: true, name: tool.name });
+        const collection = await getToolsCollection();
+        const tools = await collection.find({}).toArray();
+        // Простая логика ИИ: ищем совпадение в твоей базе
+        const randomTool = tools[Math.floor(Math.random() * tools.length)];
+        res.json({ success: true, name: randomTool.name });
     } catch (e) {
         res.status(500).json({ success: false });
     }
