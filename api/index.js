@@ -3,11 +3,11 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
-// Настройка CORS: разрешаем всё, чтобы Netlify мог достучаться
+// Полное разрешение CORS для работы с Netlify
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type']
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json({ limit: '10mb' }));
@@ -24,25 +24,25 @@ async function getDb() {
     return cachedDb;
 }
 
-// Маршрут для списка (склада)
+// Маршрут для получения всех 43 инструментов
 app.get('/api/tools', async (req, res) => {
     try {
         const db = await getDb();
         const tools = await db.collection("tools").find().toArray();
         res.status(200).json(tools);
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(500).json([]);
     }
 });
 
-// Маршрут для ИИ
+// Маршрут для имитации распознавания
 app.post('/api/identify', async (req, res) => {
     try {
         const db = await getDb();
         const tools = await db.collection("tools").find().toArray();
-        // Имитация ИИ: берем инструмент из твоих 43
-        const tool = tools[Math.floor(Math.random() * tools.length)];
-        res.json({ success: true, name: tool.name });
+        // Имитируем ИИ, выбирая случайный инструмент из базы
+        const identified = tools[Math.floor(Math.random() * tools.length)];
+        res.json({ success: true, name: identified.name });
     } catch (e) {
         res.status(500).json({ success: false });
     }
