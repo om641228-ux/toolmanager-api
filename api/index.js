@@ -11,27 +11,27 @@ const client = new MongoClient(uri);
 
 let cachedDb = null;
 
-async function connectToDatabase() {
+async function getDb() {
     if (cachedDb) return cachedDb;
     await client.connect();
-    cachedDb = client.db("toolmanager"); // Подключение к базе из Atlas
+    cachedDb = client.db("toolmanager"); // Твоя база
     return cachedDb;
 }
 
 app.get('/api/tools', async (req, res) => {
     try {
-        const db = await connectToDatabase();
+        const db = await getDb();
         const tools = await db.collection("tools").find().toArray();
-        res.status(200).json(tools); // Отправка всех 43 инструментов
+        res.status(200).json(tools); // Отправляем все 43 инструмента
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        console.error(e);
+        res.status(500).json({ error: "Ошибка сервера", details: e.message });
     }
 });
 
-// Маршрут для будущей интеграции реального ИИ
-app.post('/api/identify', async (req, res) => {
-    // Здесь будет логика сравнения фото с базой
-    res.json({ message: "Ready for AI model" });
+// Заглушка для будущего реального ИИ
+app.post('/api/identify', (req, res) => {
+    res.json({ status: "ready" });
 });
 
 module.exports = app;
