@@ -2,6 +2,8 @@ const { MongoClient } = require('mongodb');
 const express = require('express');
 const cors = require('cors');
 const app = express();
+const database = client.db("toolmanager"); // Проверь это имя!
+const tools = await database.collection("tools").find().toArray();
 
 // Снимаем блокировку CORS для Netlify
 app.use(cors({
