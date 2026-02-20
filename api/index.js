@@ -9,28 +9,35 @@ app.use(express.json({ limit: '10mb' }));
 const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
 
-// Функция для работы с БД без лишних переподключений
-async function getToolsCollection() {
+// Глобальная переменная для базы данных
+let cachedDb = null;
+
+async function connectToDatabase() {
+    if (cachedDb) return cachedDb;
     await client.connect();
-    return client.db("toolmanager").collection("tools");
+    cachedDb = client.db("toolmanager");
+    return cachedDb;
 }
 
+// Маршрут для склада (должен вернуть 43 инструмента)
 app.get('/api/tools', async (req, res) => {
     try {
-        const collection = await getToolsCollection();
-        const tools = await collection.find({}).toArray();
-        console.log("Found tools:", tools.length);
-        res.status(200).json(tools); // Должно вернуть 43 инструмента
+        const db = await connectToDatabase();
+        const tools = await db.collection("tools").find({}).toArray();
+        res.status(200).json(tools);
     } catch (e) {
-        res.status(500).json({ error: "DB_ERROR", details: e.message });
+        res.status(500).json({ error: e.message });
     }
 });
 
+// Маршрут для ИИ
 app.post('/api/identify', async (req, res) => {
     try {
-        const collection = await getToolsCollection();
-        const tools = await collection.find({}).toArray();
-        // Простая логика ИИ: ищем совпадение в твоей базе
+        const db = await connectToDatabase();
+        const tools = await db.collection("tools").find({}).toArray();
+        if (tools.length === 0) return res.json({ success: false });
+        
+        // Простая имитация распознавания из базы
         const randomTool = tools[Math.floor(Math.random() * tools.length)];
         res.json({ success: true, name: randomTool.name });
     } catch (e) {
