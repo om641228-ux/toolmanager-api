@@ -9,29 +9,20 @@ app.use(express.json({ limit: '10mb' }));
 const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
 
-let cachedDb = null;
-
-async function getDb() {
-    if (cachedDb) return cachedDb;
-    await client.connect();
-    cachedDb = client.db("toolmanager"); // Твоя база
-    return cachedDb;
-}
-
+// Функция для безопасного получения данных
 app.get('/api/tools', async (req, res) => {
     try {
-        const db = await getDb();
+        await client.connect();
+        const db = client.db("toolmanager");
         const tools = await db.collection("tools").find().toArray();
-        res.status(200).json(tools); // Отправляем все 43 инструмента
+        // Всегда возвращаем массив, даже если он пустой, чтобы не было ошибки .map()
+        res.status(200).json(Array.isArray(tools) ? tools : []);
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: "Ошибка сервера", details: e.message });
+        console.error("DB Error:", e);
+        res.status(500).json([]); // Возвращаем пустой массив при ошибке
+    } finally {
+        await client.close();
     }
-});
-
-// Заглушка для будущего реального ИИ
-app.post('/api/identify', (req, res) => {
-    res.json({ status: "ready" });
 });
 
 module.exports = app;
