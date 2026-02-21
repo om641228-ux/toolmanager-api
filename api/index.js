@@ -3,38 +3,52 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
-app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Чтобы тяжелые фото пролезали
+// Настройка CORS: разрешаем доступ твоему фронтенду
+app.use(cors({
+    origin: 'https://willowy-pixie-bbc2ca.netlify.app',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type']
+}));
+
+app.use(express.json({ limit: '10mb' }));
 
 const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
 
-async function getDb() {
+async function connectToDatabase() {
     await client.connect();
     return client.db("toolmanager");
 }
 
-// РЕАЛЬНОЕ РАСПОЗНАВАНИЕ
+// Маршрут для получения всех 43 инструментов
+app.get('/api/tools', async (req, res) => {
+    try {
+        const db = await connectToDatabase();
+        const tools = await db.collection("tools").find({}).toArray();
+        res.status(200).json(tools);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// Маршрут для распознавания и сравнения
 app.post('/api/identify', async (req, res) => {
     try {
-        const { image } = req.body; 
-        const db = await getDb();
+        const db = await connectToDatabase();
         const tools = await db.collection("tools").find({}).toArray();
+        if (!tools.length) return res.json({ success: false });
 
-        if (!tools || tools.length === 0) throw new Error("База пуста");
-
-        // В будущем здесь будет вызов TensorFlow/OpenAI.
-        // Сейчас сервер делает "умный поиск" по твоей базе.
-        const matchedTool = tools[Math.floor(Math.random() * tools.length)];
-
-        res.status(200).json({
+        // Выбираем случайный инструмент из базы для сравнения
+        const matched = tools[Math.floor(Math.random() * tools.length)];
+        
+        res.json({
             success: true,
-            name: matchedTool.name,
-            category: matchedTool.category,
-            dbImage: matchedTool.image // Возвращаем эталонное фото для сравнения
+            name: matched.name,
+            category: matched.category,
+            dbImage: matched.image // Фото из базы для сравнения
         });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
+        res.status(500).json({ success: false });
     }
 });
 
