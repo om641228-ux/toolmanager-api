@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
-app.use(cors()); // Разрешаем всё для тестов
+app.use(cors()); 
 app.use(express.json({ limit: '10mb' }));
 
 const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager?retryWrites=true&w=majority";
@@ -16,17 +16,18 @@ app.post('/api/identify', async (req, res) => {
         const tools = await db.collection("tools").find({}).toArray();
 
         if (!tools || tools.length === 0) {
-            return res.status(200).json({ success: false, message: "База пуста" });
+            return res.json({ success: false, message: "База пуста" });
         }
 
-        // Выбираем случайный инструмент из твоих документов
+        // Берем один из твоих 43 инструментов
         const matched = tools[Math.floor(Math.random() * tools.length)];
 
-        res.status(200).json({
+        res.json({
             success: true,
-            name: matched.name || "Инструмент без имени",
-            category: matched.category || "Проверка",
-            dbImage: matched.image || "https://via.placeholder.com/300?text=No+Image+In+DB" 
+            name: matched.name || "Инструмент",
+            category: matched.category || "Общее",
+            // Если в MongoDB нет поля image, шлем заглушку
+            dbImage: matched.image || "https://via.placeholder.com/300?text=No+Photo+In+DB"
         });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
