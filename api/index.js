@@ -3,37 +3,35 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
-// Полный доступ для Netlify
-app.use(cors({ origin: '*' }));
+app.use(cors()); // Разрешаем всё для тестов
 app.use(express.json({ limit: '10mb' }));
 
 const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager?retryWrites=true&w=majority";
 const client = new MongoClient(uri);
 
-async function connect() {
-    await client.connect();
-    return client.db("toolmanager");
-}
-
 app.post('/api/identify', async (req, res) => {
     try {
-        const db = await connect();
+        await client.connect();
+        const db = client.db("toolmanager");
         const tools = await db.collection("tools").find({}).toArray();
 
-        if (!tools.length) return res.status(404).json({ success: false });
+        if (!tools || tools.length === 0) {
+            return res.status(200).json({ success: false, message: "База пуста" });
+        }
 
-        // Здесь происходит магия сравнения. 
-        // Пока мы берем случайный инструмент для теста связи.
+        // Выбираем случайный инструмент из твоих документов
         const matched = tools[Math.floor(Math.random() * tools.length)];
 
-        res.json({
+        res.status(200).json({
             success: true,
-            name: matched.name,
-            category: matched.category,
-            dbImage: matched.image // Важно: это поле с фото из твоей базы
+            name: matched.name || "Инструмент без имени",
+            category: matched.category || "Проверка",
+            dbImage: matched.image || "https://via.placeholder.com/300?text=No+Image+In+DB" 
         });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
+    } finally {
+        await client.close();
     }
 });
 
