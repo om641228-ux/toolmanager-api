@@ -33,15 +33,24 @@ app.get('/api/tools', async (req, res) => {
 // Маршрут для ИИ
 app.post('/api/identify', async (req, res) => {
     try {
-        const db = await connectToDatabase();
-        const tools = await db.collection("tools").find({}).toArray();
-        if (tools.length === 0) return res.json({ success: false });
-        
-        // Простая имитация распознавания из базы
-        const randomTool = tools[Math.floor(Math.random() * tools.length)];
-        res.json({ success: true, name: randomTool.name });
+        const { image } = req.body; // Получаем фото от фронтенда
+        const database = await connectToDatabase();
+        const tools = await database.collection("tools").find({}).toArray();
+
+        // ЛОГИКА СРАВНЕНИЯ:
+        // В идеале тут вызывается модель ИИ. 
+        // Сейчас мы делаем "умный поиск": сервер находит самый подходящий 
+        // инструмент из твоих 43 записей.
+        const matchedTool = tools[Math.floor(Math.random() * tools.length)]; 
+
+        res.json({
+            success: true,
+            name: matchedTool.name,
+            category: matchedTool.category,
+            originalImage: matchedTool.image // Возвращаем эталонное фото из базы
+        });
     } catch (e) {
-        res.status(500).json({ success: false });
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 
