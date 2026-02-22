@@ -4,40 +4,43 @@ const uri = "mongodb+srv://admin:MMAMVM@cluster0.jt4tijh.mongodb.net/toolmanager
 const client = new MongoClient(uri);
 
 module.exports = async (req, res) => {
-    // Включаем заголовки CORS вручную
-    res.setHeader('Access-Control-Allow-Credentials', true);
+    // ЖЕСТКИЙ CORS: Разрешаем всё и всем прямо на входе
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-    // Ответ на предварительный запрос браузера
+    // Если браузер просто "спрашивает" разрешение (OPTIONS), сразу отвечаем "ОК"
     if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
+        return res.status(200).end();
     }
 
-    try {
-        await client.connect();
-        const db = client.db("toolmanager");
-        // Ищем твои "ТЕРМИНАЛЬНЫЕ МОЛОТКИ"
-        const tools = await db.collection("tools").find({}).toArray();
+    // Если это основной запрос (POST)
+    if (req.method === 'POST') {
+        try {
+            await client.connect();
+            const db = client.db("toolmanager");
+            const tools = await db.collection("tools").find({}).toArray();
 
-        if (!tools || tools.length === 0) {
-            return res.status(200).json({ success: false, message: "База пуста" });
+            if (!tools || tools.length === 0) {
+                return res.status(200).json({ success: false, message: "База пуста" });
+            }
+
+            // Берем случайный инструмент из твоих 43 позиций
+            const matched = tools[Math.floor(Math.random() * tools.length)];
+
+            return res.status(200).json({
+                success: true,
+                name: matched.name || "Инструмент найден",
+                category: matched.category || "Общее",
+                dbImage: matched.image || "https://via.placeholder.com/300?text=Tool+from+DB"
+            });
+        } catch (e) {
+            return res.status(500).json({ success: false, error: e.message });
+        } finally {
+            await client.close();
         }
-
-        const matched = tools[Math.floor(Math.random() * tools.length)];
-
-        res.status(200).json({
-            success: true,
-            name: matched.name,
-            category: matched.category,
-            // Ссылка-заглушка, так как в твоей базе пока нет фото
-            dbImage: "https://images.unsplash.com/photo-1581147036324-c17ac41dfa6c?w=400" 
-        });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    } finally {
-        await client.close();
     }
+
+    // На любой другой метод отвечаем ошибкой
+    return res.status(405).json({ message: "Only POST allowed" });
 };
