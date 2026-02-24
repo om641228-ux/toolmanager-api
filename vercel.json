@@ -1,16 +1,11 @@
 {
   "version": 2,
+  "functions": {
+    "api/index.js": {
+      "runtime": "vercel-nodejs@20"
+    }
+  },
   "rewrites": [
     { "source": "/api/identify", "destination": "/api/index.js" }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type" }
-      ]
-    }
   ]
 }
