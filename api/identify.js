@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 module.exports = async (req, res) => {
-  // Настройки CORS для связи с Netlify
+  // CORS для работы с Netlify
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -10,23 +10,17 @@ module.exports = async (req, res) => {
 
   try {
     const { image } = req.body;
-    if (!image) return res.status(400).json({ success: false, error: "Фото не получено" });
+    if (!image) return res.status(400).json({ success: false, error: "Нет фото" });
 
-    // БЕРЕМ КЛЮЧ ИЗ НАСТРОЕК VERCEL (СИСТЕМА БОЛЬШЕ ЕГО НЕ ЗАБЛОКИРУЕТ)
+    // Ключ берется из настроек Vercel (GEMINI_API_KEY)
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ 
-        success: false, 
-        name: "Ошибка: Ключ GEMINI_API_KEY не найден в Environment Variables на Vercel" 
-      });
-    }
+    if (!apiKey) throw new Error("API Key не найден в Environment Variables");
 
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // ИСПОЛЬЗУЕМ САМУЮ ПРОДВИНУТУЮ МОДЕЛЬ ИЗ ТВОЕГО СПИСКА
+    // Используем самую продвинутую модель 2.5 Pro
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
-    // Подготовка изображения
     const base64Data = image.split(',')[1];
     const imagePart = {
       inlineData: {
@@ -35,16 +29,16 @@ module.exports = async (req, res) => {
       }
     };
 
-    // Промпт для детального табличного вывода
-    const prompt = `Ты — эксперт по инструментам. Распознай ВСЕ объекты на фото.
-    Для каждого инструмента создай строго одну строку в формате:
-    Название инструмента | Характерные черты (цвет, состояние, детали)
+    // Промпт, заточенный под Pro-модель и табличный вывод
+    const prompt = `Ты эксперт-инструментальщик. Тщательно проанализируй фото.
+    Найди ВСЕ инструменты и для каждого создай ОДНУ СТРОКУ в формате:
+    Название инструмента | Характерные черты (бренд, цвет, состояние)
     
-    Пример ответа:
-    Бокорезы | Красные ручки, есть следы износа
-    Ключ разводной | Стальной, марка MATRIX
+    Пример:
+    Плоскогубцы KNIPEX | Сине-красные ручки, новые
+    Отвертка шлицевая | Желтая ручка, намагниченное жало
     
-    Пиши только список, без вводных слов.`;
+    Пиши ТОЛЬКО этот список. Без цифр, без лишних слов. Каждая позиция с новой строки.`;
 
     const result = await model.generateContent([prompt, imagePart]);
     const response = await result.response;
@@ -56,10 +50,10 @@ module.exports = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Ошибка сервера:", err);
+    console.error(err);
     return res.status(500).json({ 
       success: false, 
-      name: "Ошибка модели 2.5 Pro: " + err.message 
+      name: "Ошибка 2.5 Pro: " + err.message 
     });
   }
 };
