@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 module.exports = async (req, res) => {
-  // Настройка CORS для работы с Netlify
+  // Настройка CORS для стабильной связи Netlify + Vercel
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -10,15 +10,14 @@ module.exports = async (req, res) => {
 
   try {
     const { image } = req.body;
-    if (!image) return res.status(400).json({ success: false, error: "Нет изображения" });
+    if (!image) return res.status(400).json({ success: false, error: "Фото не получено" });
 
-    // 1. Твой новый проверенный ключ
-    const genAI = new GoogleGenerativeAI("AIzaSyDQb4WD2NZebkuGpejZioYPN64g0TdCcQQ");
+    // 1. Твой подтвержденный рабочий ключ (вставлен без лишних пробелов)
+    const genAI = new GoogleGenerativeAI("AIzaSyB0hM1pZaAJ_xj7Q0TDbRIzmMIMD7VwvM4");
+    
+    // 2. ВЫБРАННАЯ МОДЕЛЬ: Самая мощная из твоего списка
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // 2. ИСПОЛЬЗУЕМ САМУЮ ЛУЧШУЮ МОДЕЛЬ ИЗ ТВОЕГО СПИСКА
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    // Подготовка картинки
     const base64Data = image.split(',')[1];
     const imagePart = {
       inlineData: {
@@ -27,23 +26,24 @@ module.exports = async (req, res) => {
       }
     };
 
-    // 3. Четкая инструкция для ИИ
-    const prompt = "Что это за инструмент на фото? Назови только его название на русском языке. Будь точен (например: Клещи строительные, Тиски слесарные, Пассатижи).";
+    // 3. Улучшенный промпт для точности
+    const prompt = "Что это за инструмент на фото? Назови только его технически правильное название на русском языке (например: Тиски слесарные, Клещи переставные, Пассатижи).";
 
     const result = await model.generateContent([prompt, imagePart]);
     const response = await result.response;
     const text = response.text().trim();
 
+    // Возвращаем результат в интерфейс
     return res.status(200).json({ 
       success: true, 
       name: text 
     });
+
   } catch (err) {
-    console.error("Критическая ошибка:", err);
-    // Выводим текст ошибки, чтобы видеть причину в браузере, если что-то не так
+    console.error("Ошибка API:", err);
     return res.status(500).json({ 
       success: false, 
-      error: "Ошибка Gemini 2.0: " + err.message 
+      name: "Ошибка модели 2.5: " + err.message 
     });
   }
 };
