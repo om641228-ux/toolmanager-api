@@ -11,10 +11,7 @@ module.exports = async (req, res) => {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
-    const prompt = `Ты эксперт-инструментальщик. Опиши инструмент на фото. 
-    Выдай строго одну строку в формате: Название | Бренд | Состояние. 
-    Пример: Молоток | Stanley | Хорошее`;
-
+    const prompt = "Распознай инструмент. Выдай строго одну строку: Название | Бренд | Состояние";
     const result = await model.generateContent([
       prompt,
       { inlineData: { data: image.split(',')[1], mimeType: "image/jpeg" } }
