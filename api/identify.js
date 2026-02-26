@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 module.exports = async (req, res) => {
-  // CORS для работы с Netlify
+  // Настройка заголовков для безопасной связи с Netlify
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -10,17 +10,23 @@ module.exports = async (req, res) => {
 
   try {
     const { image } = req.body;
-    if (!image) return res.status(400).json({ success: false, error: "Нет фото" });
+    if (!image) return res.status(400).json({ success: false, error: "Нет изображения" });
 
-    // Ключ берется из настроек Vercel (GEMINI_API_KEY)
+    // БЕЗОПАСНОСТЬ: Берем новый ключ из секретов Vercel
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("API Key не найден в Environment Variables");
+    if (!apiKey) {
+      return res.status(500).json({ 
+        success: false, 
+        name: "СЕРВЕР | Ошибка: Ключ GEMINI_API_KEY не настроен в Vercel" 
+      });
+    }
 
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Используем самую продвинутую модель 2.5 Pro
+    // ИСПОЛЬЗУЕМ САМУЮ МОЩНУЮ МОДЕЛЬ ИЗ СПИСКА
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
+    // Подготовка картинки
     const base64Data = image.split(',')[1];
     const imagePart = {
       inlineData: {
@@ -29,31 +35,33 @@ module.exports = async (req, res) => {
       }
     };
 
-    // Промпт, заточенный под Pro-модель и табличный вывод
-    const prompt = `Ты эксперт-инструментальщик. Тщательно проанализируй фото.
-    Найди ВСЕ инструменты и для каждого создай ОДНУ СТРОКУ в формате:
+    // СПЕЦИАЛЬНЫЙ ПРОМПТ ДЛЯ МОДЕЛИ 2.5 PRO
+    const prompt = `Ты эксперт по строительным инструментам. Тщательно изучи фото.
+    Найди ВСЕ инструменты и для каждого создай СТРОГО одну строку в формате:
     Название инструмента | Характерные черты (бренд, цвет, состояние)
     
-    Пример:
-    Плоскогубцы KNIPEX | Сине-красные ручки, новые
-    Отвертка шлицевая | Желтая ручка, намагниченное жало
+    Пример ответа:
+    Молоток Stanley | Черная прорезиненная ручка, новый
+    Ключ рожковый 17мм | Стальной, есть следы ржавчины
     
-    Пиши ТОЛЬКО этот список. Без цифр, без лишних слов. Каждая позиция с новой строки.`;
+    Пиши ТОЛЬКО список через разделитель "|". Не используй цифры, точки или лишние слова.`;
 
     const result = await model.generateContent([prompt, imagePart]);
     const response = await result.response;
-    const text = response.text().trim();
+    
+    // Очищаем ответ от возможных артефактов Markdown (например, **)
+    const cleanText = response.text().replace(/\*/g, '').trim();
 
     return res.status(200).json({ 
       success: true, 
-      name: text 
+      name: cleanText 
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("Критическая ошибка:", err);
     return res.status(500).json({ 
       success: false, 
-      name: "Ошибка 2.5 Pro: " + err.message 
+      name: "Ошибка 2.5 Pro | " + err.message 
     });
   }
 };
