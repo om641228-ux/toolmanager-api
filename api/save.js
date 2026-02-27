@@ -1,48 +1,42 @@
 const { MongoClient } = require('mongodb');
 
 module.exports = async (req, res) => {
-  // Настройки доступа (CORS)
+  // Настройка CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Нужен POST запрос' });
-  }
-
   const uri = process.env.MONGODB_URI;
   if (!uri) {
-    return res.status(500).json({ error: 'Переменная MONGODB_URI не найдена в настройках Vercel' });
+    return res.status(500).json({ success: false, error: "MONGODB_URI не настроен в Vercel" });
   }
 
-  const client = new MongoClient(uri);
+  // Создаем клиент один раз вне try/catch для стабильности
+  const client = new MongoClient(uri, {
+    connectTimeoutMS: 5000,
+    socketTimeoutMS: 5000,
+  });
 
   try {
     const { item } = req.body;
-    
-    if (!item || !item.name) {
-      return res.status(400).json({ error: 'Данные инструмента пусты или неверны' });
-    }
+    if (!item) throw new Error("Нет данных для сохранения (item is empty)");
 
     await client.connect();
-    console.log("Успешное подключение к MongoDB");
+    const db = client.db('toolmanager');
+    const collection = db.collection('inventory');
 
-    const db = client.db('toolmanager'); // Имя базы данных
-    const collection = db.collection('inventory'); // Имя коллекции
-
+    // Сама запись
     const result = await collection.insertOne({
       ...item,
-      addedAt: new Date(),
-      source: 'AI Scanner'
+      addedAt: new Date()
     });
 
-    console.log("Запись создана:", result.insertedId);
     return res.status(200).json({ success: true, id: result.insertedId });
 
   } catch (err) {
-    console.error("Ошибка при записи в Mongo:", err.message);
+    console.error("Ошибка MongoDB:", err.message);
     return res.status(500).json({ success: false, error: err.message });
   } finally {
     await client.close();
