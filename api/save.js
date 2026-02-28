@@ -1,28 +1,28 @@
 const { MongoClient } = require('mongodb');
 
 module.exports = async (req, res) => {
-  // Настройка CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // 1. ПРОВЕРКА ССЫЛКИ
-  const uri = process.env.MONGODB_URI ? process.env.MONGODB_URI.trim() : null;
+  // 1. Извлекаем и ЧИСТИМ ссылку от пробелов/кавычек
+  const rawUri = process.env.MONGODB_URI;
+  const uri = rawUri ? rawUri.trim().replace(/['"]/g, '') : null;
 
   if (!uri) {
     return res.status(500).json({ 
       success: false, 
-      error: "Ошибка: Переменная MONGODB_URI не найдена в настройках Vercel!" 
+      error: "Переменная MONGODB_URI не найдена! Проверь Settings в Vercel." 
     });
   }
 
-  // Если ссылка начинается не так, как надо
-  if (!uri.startsWith("mongodb://") && !uri.startsWith("mongodb+srv://")) {
+  // 2. Проверка формата (чтобы не упало с той же ошибкой)
+  if (!uri.startsWith("mongodb+srv://") && !uri.startsWith("mongodb://")) {
     return res.status(500).json({ 
       success: false, 
-      error: "Ошибка: Ссылка в MONGODB_URI должна начинаться с mongodb+srv://" 
+      error: "Ошибка: Ссылка в Vercel начинается неверно. Должна быть с 'mongodb+srv://'" 
     });
   }
 
@@ -37,7 +37,7 @@ module.exports = async (req, res) => {
     const result = await collection.insertOne({ ...item, addedAt: new Date() });
     return res.status(200).json({ success: true, id: result.insertedId });
   } catch (err) {
-    return res.status(500).json({ success: false, error: "Ошибка базы: " + err.message });
+    return res.status(500).json({ success: false, error: "Ошибка MongoDB: " + err.message });
   } finally {
     await client.close();
   }
